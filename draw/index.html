@@ -58,6 +58,7 @@ small a{color:var(--acc)}
   <div class="row"><label for="size">Thickness</label><input type="range" id="size" min="1" max="120" value="8"><output id="so">8</output></div>
   <div class="row"><label for="alpha">Opacity</label><input type="range" id="alpha" min="1" max="100" value="100"><output id="ao">100%</output></div>
   <div class="row"><label for="tol">Fill range</label><input type="range" id="tol" min="0" max="128" value="32"><output id="to">32</output></div>
+  <div class="row"><label for="rad" title="Rounds rectangle and triangle corners">Corners</label><input type="range" id="rad" min="0" max="200" value="0"><output id="ro">0</output></div>
   <div class="row"><label for="mode">Shapes</label><select id="mode" style="flex:1"><option value="stroke">Outline</option><option value="fill">Filled</option><option value="both">Outline + fill</option></select></div>
  </section>
  <section><h2>Canvas</h2>
@@ -73,7 +74,7 @@ small a{color:var(--acc)}
 const $=s=>document.querySelector(s);
 const cv=$('#cv'),ctx=cv.getContext('2d',{willReadFrequently:true});
 const pv=$('#pv'),pctx=pv.getContext('2d');
-const st={tool:'pen',color:'#111111',fill:'#ff5a5f',size:8,alpha:1,tol:32,mode:'stroke',bg:'#ffffff',zoom:1};
+const st={tool:'pen',color:'#111111',fill:'#ff5a5f',size:8,alpha:1,tol:32,mode:'stroke',radius:0,bg:'#ffffff',zoom:1};
 const TOOLS=[['pen','✏️','Pen','p'],['marker','🖍️','Marker','b'],['rainbow','🌈','Rainbow','r'],['spray','💨','Spray','s'],['eraser','🧽','Eraser','e'],['line','╱','Line','l'],['rect','▭','Rectangle','q'],['ellipse','◯','Ellipse','o'],['tri','△','Triangle','t'],['star','★','Star','k'],['fill','🪣','Bucket','f'],['pick','💧','Picker','i']];
 const FREE=['pen','marker','rainbow','spray','eraser'];
 const SW=['#111111','#555555','#9a9a9a','#ffffff','#e63946','#f77f00','#fcbf49','#f1e04a','#80c342','#2a9d5c','#4fd1c5','#2ec4f0','#2f6fed','#6a3de8','#c13fd6','#ff6fa8','#7a4a21','#c98f5b','#ffd7b0','#0b3d4a','#8a1c2b','#ff9f80','#b7e4a0','#a8c7ff'];
@@ -90,6 +91,7 @@ $('#swap').onclick=()=>{const a=st.color;setColor(st.fill);st.fill=a;$('#fcolor'
 $('#size').oninput=e=>{st.size=+e.target.value;$('#so').textContent=st.size};
 $('#alpha').oninput=e=>{st.alpha=e.target.value/100;$('#ao').textContent=e.target.value+'%'};
 $('#tol').oninput=e=>{st.tol=+e.target.value;$('#to').textContent=st.tol};
+$('#rad').oninput=e=>{st.radius=+e.target.value;$('#ro').textContent=st.radius};
 $('#mode').onchange=e=>st.mode=e.target.value;
 $('#bg').oninput=e=>st.bg=e.target.value;
 $('#preset').onchange=e=>{if(e.target.value!=='custom'){const[w,h]=e.target.value.split('x');$('#cw').value=w;$('#ch').value=h;resizeCanvas(+w,+h)}};
@@ -157,14 +159,27 @@ function end(e){
 }
 pv.addEventListener('pointerup',end);pv.addEventListener('pointercancel',end);
 
+function roundPoly(c,P,r){
+ const n=P.length;c.beginPath();
+ for(let i=0;i<n;i++){
+  const p0=P[(i+n-1)%n],p1=P[i],p2=P[(i+1)%n];
+  const ax=p0.x-p1.x,ay=p0.y-p1.y,bx=p2.x-p1.x,by=p2.y-p1.y,la=Math.hypot(ax,ay),lb=Math.hypot(bx,by);
+  if(!la||!lb){c[i?'lineTo':'moveTo'](p1.x,p1.y);continue}
+  let d=0,rr=0;
+  if(r>0){const th=Math.acos(Math.max(-1,Math.min(1,(ax*bx+ay*by)/(la*lb)))),tn=Math.tan(th/2);if(tn>1e-3){d=Math.min(r/tn,Math.min(la,lb)/2);rr=d*tn}}
+  c[i?'lineTo':'moveTo'](p1.x+ax/la*d,p1.y+ay/la*d);
+  if(rr)c.arcTo(p1.x,p1.y,p1.x+bx/lb*d,p1.y+by/lb*d,rr);
+ }
+ c.closePath();
+}
 function shape(c,a,b,sh){
  let dx=b.x-a.x,dy=b.y-a.y;const t=st.tool;
  if(sh){if(t==='line'){const g=Math.round(Math.atan2(dy,dx)/(Math.PI/4))*Math.PI/4,l=Math.hypot(dx,dy);dx=Math.cos(g)*l;dy=Math.sin(g)*l}else{const m=Math.max(Math.abs(dx),Math.abs(dy));dx=(dx<0?-1:1)*m;dy=(dy<0?-1:1)*m}}
  const x2=a.x+dx,y2=a.y+dy;c.beginPath();
  if(t==='line'){c.moveTo(a.x,a.y);c.lineTo(x2,y2)}
- else if(t==='rect')c.rect(a.x,a.y,dx,dy);
+ else if(t==='rect')roundPoly(c,[{x:a.x,y:a.y},{x:x2,y:a.y},{x:x2,y:y2},{x:a.x,y:y2}],st.radius);
  else if(t==='ellipse')c.ellipse(a.x+dx/2,a.y+dy/2,Math.abs(dx/2),Math.abs(dy/2),0,0,6.2832);
- else if(t==='tri'){c.moveTo(a.x+dx/2,a.y);c.lineTo(x2,y2);c.lineTo(a.x,y2);c.closePath()}
+ else if(t==='tri')roundPoly(c,[{x:a.x+dx/2,y:a.y},{x:x2,y:y2},{x:a.x,y:y2}],st.radius);
  else if(t==='star'){const cx=a.x+dx/2,cy=a.y+dy/2,rx=Math.abs(dx/2),ry=Math.abs(dy/2);for(let i=0;i<10;i++){const g=-Math.PI/2+i*Math.PI/5,r=i%2?.4:1;c[i?'lineTo':'moveTo'](cx+Math.cos(g)*rx*r,cy+Math.sin(g)*ry*r)}c.closePath()}
  if(t!=='line'&&st.mode!=='stroke'){c.fillStyle=st.fill;c.fill()}
  if(t==='line'||st.mode!=='fill')c.stroke();
