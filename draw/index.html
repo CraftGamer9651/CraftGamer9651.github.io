@@ -68,7 +68,7 @@ small a{color:var(--acc)}
   <div class="row"><label for="bg">Background</label><input type="color" id="bg" value="#ffffff"><small>used by Clear &amp; eraser</small></div>
  </section>
  <section><h2>Selection</h2><div class="sel"><button id="del">Delete</button><button id="dup">Duplicate</button><button id="front">To front</button><button id="back">To back</button></div><small>Pick the Select tool and click anything to edit it with the controls above. Drag to move, drag the handles to resize.</small></section>
- <small>Shift = straight lines, squares, circles.<br>Keys: V P B R S E L Q O T K F I, [ ] = size, Del = delete, arrows = nudge.<br><br>Made by knokyoursock &middot; <a href="https://github.com/CraftGamer9651" target="_blank" rel="noopener">GitHub</a> &middot; <a href="https://craftgamer9651.github.io/" target="_blank" rel="noopener">Website</a></small>
+ <small>Shift = straight lines, squares, circles.<br>Keys: V P B R S E L Q O T K F I, [ ] = size, Del = delete, arrows = nudge, Shift + Eraser = wipe whole objects.<br><br>Made by knokyoursock &middot; <a href="https://github.com/CraftGamer9651" target="_blank" rel="noopener">GitHub</a> &middot; <a href="https://craftgamer9651.github.io/" target="_blank" rel="noopener">Website</a></small>
 </aside>
 <div id="area"><div id="stack"><canvas id="cv"></canvas><canvas id="pv"></canvas></div></div>
 </main>
@@ -82,7 +82,7 @@ const st={tool:'pen',color:'#111111',fill:'#ff5a5f',size:8,alpha:1,tol:32,mode:'
 const TOOLS=[['select','↖','Select','v'],['pen','✏️','Pen','p'],['marker','🖍️','Marker','b'],['rainbow','🌈','Rainbow','r'],['spray','💨','Spray','s'],['eraser','🧽','Eraser','e'],['line','╱','Line','l'],['rect','▭','Rectangle','q'],['ellipse','◯','Ellipse','o'],['tri','△','Triangle','t'],['star','★','Star','k'],['fill','🪣','Bucket','f'],['pick','💧','Picker','i']];
 const FREE=['pen','marker','rainbow','spray','eraser'],CLOSED=['rect','ellipse','tri','star'];
 const SW=['#111111','#555555','#9a9a9a','#ffffff','#e63946','#f77f00','#fcbf49','#f1e04a','#80c342','#2a9d5c','#4fd1c5','#2ec4f0','#2f6fed','#6a3de8','#c13fd6','#ff6fa8','#7a4a21','#c98f5b','#ffd7b0','#0b3d4a','#8a1c2b','#ff9f80','#b7e4a0','#a8c7ff'];
-let objs=[],sel=null,hist=[],redo=[],baseImg=null,cur=null,drag=null,last,sprayT,lastEdit=0;
+let objs=[],sel=null,hist=[],redo=[],baseImg=null,cur=null,drag=null,last,sprayT,lastEdit=0,erasing=0;
 
 // ---------- UI
 TOOLS.forEach(([id,ic,name,key])=>{const b=document.createElement('button');b.dataset.t=id;b.title=name+' ('+key.toUpperCase()+')';b.innerHTML='<span>'+ic+'</span>'+name;b.onclick=()=>setTool(id);$('#tools').append(b)});
@@ -175,8 +175,8 @@ function roundPoly(c,P,r){
 
 // ---------- hit testing and selection overlay
 function segD(px,py,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],l=dx*dx+dy*dy;let t=l?((px-a[0])*dx+(py-a[1])*dy)/l:0;t=Math.max(0,Math.min(1,t));return Math.hypot(px-a[0]-t*dx,py-a[1]-t*dy)}
-function hit(o,p,fa){
- const tol=o.w/2+6/st.zoom,P=o.p,t=o.t;
+function hit(o,p,fa,ex=0){
+ const tol=o.w/2+6/st.zoom+ex,P=o.p,t=o.t;
  if(t==='spray'){const b=bbox(o);return p.x>=b.x-tol&&p.x<=b.x+b.w+tol&&p.y>=b.y-tol&&p.y<=b.y+b.h+tol}
  if(!CLOSED.includes(t)){for(let i=0;i<P.length;i++)if(segD(p.x,p.y,P[i],P[i+1]||P[i])<=tol)return true;return false}
  hc.lineWidth=tol*2;shapePath(hc,t,P[0][0],P[0][1],P[1][0],P[1][1],o.r);
@@ -228,6 +228,7 @@ pv.addEventListener('pointerdown',e=>{
  }
  if(t==='pick'){const x=Math.max(0,Math.min(cv.width-1,Math.floor(p.x))),y=Math.max(0,Math.min(cv.height-1,Math.floor(p.y))),d=ctx.getImageData(x,y,1,1).data;setColor('#'+[d[0],d[1],d[2]].map(v=>v.toString(16).padStart(2,'0')).join(''));return}
  push();pv.setPointerCapture(e.pointerId);last=p;
+ if(t==='eraser'){erasing=1;if(e.shiftKey){wipe(p);cur=null}else cur=newEraser(p);render();return}
  const er=t==='eraser',o=cur={t:er?'pen':t,e:er?1:0,c:er?st.bg:st.color,f:st.fill,m:st.mode,w:st.size,a:er?1:st.alpha,r:st.radius,p:[[p.x,p.y]]};
  if(!FREE.includes(t))o.p.push([p.x,p.y]);
  objs.push(o);
@@ -242,6 +243,7 @@ pv.addEventListener('pointermove',e=>{
   if(drag.m)sel.p=drag.o.map(q=>[q[0]+dx,q[1]+dy]);else doResize(p,e.shiftKey);
   render();return;
  }
+ if(erasing){last=p;if(e.shiftKey){wipe(p);cur=null}else if(cur)cur.p.push([p.x,p.y]);else cur=newEraser(p);render();return}
  if(cur){
   last=p;const t=cur.t;
   if(st.tool==='spray'){addDots(cur,p)}
@@ -254,8 +256,11 @@ pv.addEventListener('pointermove',e=>{
   pv.style.cursor=h?(h.id[0]==='p'?'pointer':h.hx&&h.hy?(h.hx*h.hy>0?'nwse-resize':'nesw-resize'):h.hx?'ew-resize':'ns-resize'):hitObj(p)?'move':'default';
  }
 });
+function newEraser(p){const o={t:'pen',e:1,c:st.bg,f:st.fill,m:st.mode,w:st.size,a:1,r:st.radius,p:[[p.x,p.y]]};objs.push(o);return o}
+function wipe(p){for(let i=objs.length-1;i>=0;i--)if(!objs[i].e&&hit(objs[i],p,false,st.size/2))objs.splice(i,1)}
 function end(){
  if(drag){drag=null;return}
+ if(erasing){erasing=0;cur=null;render();return}
  if(!cur)return;
  clearInterval(sprayT);const o=cur;cur=null;
  if(CLOSED.includes(o.t)&&Math.hypot(o.p[1][0]-o.p[0][0],o.p[1][1]-o.p[0][1])<2){objs.pop();hist.pop();sync()}
