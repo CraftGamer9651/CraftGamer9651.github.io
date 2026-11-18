@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Draw</title>
+<style>
+:root{--bg:#14171f;--panel:#1d212c;--panel2:#272c3a;--line:#363c4f;--text:#e7eaf2;--mut:#8f97ad;--acc:#4fd1c5}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:14px/1.4 "Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column}
+header{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+h1{font-size:17px;margin:0 8px 0 0;letter-spacing:.2px}
+.grp{display:flex;gap:6px;align-items:center}
+button,select,input[type=number]{font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:var(--mut)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+button:disabled{opacity:.4;cursor:default}
+main{flex:1;display:flex;min-height:0}
+aside{width:236px;flex:none;overflow-y:auto;padding:12px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:14px}
+aside h2{font-size:13px;font-weight:600;color:var(--mut);margin:0 0 6px}
+#tools{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+#tools button{padding:6px 2px;font-size:12px;display:flex;flex-direction:column;align-items:center;gap:1px}
+#tools button span{font-size:17px;line-height:1.2}
+#tools button.on{background:var(--acc);border-color:var(--acc);color:#0b1d1b}
+.row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.row label{flex:none;width:62px;color:var(--mut)}
+.row input[type=range]{flex:1;min-width:0;accent-color:var(--acc)}
+.row output{width:38px;text-align:right}
+input[type=color]{width:42px;height:30px;padding:0;border:1px solid var(--line);border-radius:6px;background:none;cursor:pointer}
+#sw{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;margin-top:6px}
+#sw button{aspect-ratio:1;padding:0;border-radius:4px}
+.num{width:70px}
+#area{flex:1;display:flex;overflow:auto;padding:20px;background:
+ repeating-conic-gradient(#181b24 0 25%,#161922 0 50%) 0 0/24px 24px}
+#stack{position:relative;margin:auto;flex:none;box-shadow:0 6px 30px #0009}
+canvas{display:block}
+#pv{position:absolute;left:0;top:0;cursor:crosshair;touch-action:none}
+small{color:var(--mut)}
+small a{color:var(--acc)}
+@media(max-width:760px){main{flex-direction:column}aside{width:100%;max-height:42vh;border-right:0;border-bottom:1px solid var(--line)}}
+</style>
+</head>
+<body>
+<header>
+ <h1>Draw</h1>
+ <div class="grp"><button id="undo" title="Undo (Ctrl+Z)">Undo</button><button id="redo" title="Redo (Ctrl+Y)">Redo</button><button id="clear">Clear</button><button id="save">Save PNG</button></div>
+ <div class="grp"><button id="zo" aria-label="Zoom out">&minus;</button><span id="zl" style="min-width:44px;text-align:center"></span><button id="zi" aria-label="Zoom in">+</button><button id="zf">Fit</button></div>
+</header>
+<main>
+<aside>
+ <section><h2>Tools</h2><div id="tools"></div></section>
+ <section><h2>Color</h2>
+  <div class="row"><label for="color">Stroke</label><input type="color" id="color" value="#111111"><button id="swap" title="Swap stroke and fill colors">Swap</button><label for="fcolor" style="width:auto">Fill</label><input type="color" id="fcolor" value="#ff5a5f"></div>
+  <div id="sw"></div>
+ </section>
+ <section><h2>Brush</h2>
+  <div class="row"><label for="size">Thickness</label><input type="range" id="size" min="1" max="120" value="8"><output id="so">8</output></div>
+  <div class="row"><label for="alpha">Opacity</label><input type="range" id="alpha" min="1" max="100" value="100"><output id="ao">100%</output></div>
+  <div class="row"><label for="tol">Fill range</label><input type="range" id="tol" min="0" max="128" value="32"><output id="to">32</output></div>
+  <div class="row"><label for="mode">Shapes</label><select id="mode" style="flex:1"><option value="stroke">Outline</option><option value="fill">Filled</option><option value="both">Outline + fill</option></select></div>
+ </section>
+ <section><h2>Canvas</h2>
+  <div class="row"><label for="preset">Preset</label><select id="preset" style="flex:1"><option value="800x600">800 &times; 600</option><option value="1024x768" selected>1024 &times; 768</option><option value="1280x720">1280 &times; 720</option><option value="1920x1080">1920 &times; 1080</option><option value="512x512">512 &times; 512</option><option value="1080x1080">1080 &times; 1080</option><option value="custom">Custom</option></select></div>
+  <div class="row"><input type="number" class="num" id="cw" min="50" max="4000" value="1024" aria-label="Width"><span>&times;</span><input type="number" class="num" id="ch" min="50" max="4000" value="768" aria-label="Height"><button id="apply">Resize</button></div>
+  <div class="row"><label for="bg">Background</label><input type="color" id="bg" value="#ffffff"><small>used by Clear &amp; eraser</small></div>
+ </section>
+ <small>Shift = straight lines, squares, circles.<br>Keys: P B R S E L Q O T K F I, [ ] = size.<br><br>Made by knokyoursock &middot; <a href="https://github.com/CraftGamer9651" target="_blank" rel="noopener">GitHub</a> &middot; <a href="https://craftgamer9651.github.io/" target="_blank" rel="noopener">Website</a></small>
+</aside>
+<div id="area"><div id="stack"><canvas id="cv"></canvas><canvas id="pv"></canvas></div></div>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+const cv=$('#cv'),ctx=cv.getContext('2d',{willReadFrequently:true});
+const pv=$('#pv'),pctx=pv.getContext('2d');
+const st={tool:'pen',color:'#111111',fill:'#ff5a5f',size:8,alpha:1,tol:32,mode:'stroke',bg:'#ffffff',zoom:1};
+const TOOLS=[['pen','✏️','Pen','p'],['marker','🖍️','Marker','b'],['rainbow','🌈','Rainbow','r'],['spray','💨','Spray','s'],['eraser','🧽','Eraser','e'],['line','╱','Line','l'],['rect','▭','Rectangle','q'],['ellipse','◯','Ellipse','o'],['tri','△','Triangle','t'],['star','★','Star','k'],['fill','🪣','Bucket','f'],['pick','💧','Picker','i']];
+const FREE=['pen','marker','rainbow','spray','eraser'];
+const SW=['#111111','#555555','#9a9a9a','#ffffff','#e63946','#f77f00','#fcbf49','#f1e04a','#80c342','#2a9d5c','#4fd1c5','#2ec4f0','#2f6fed','#6a3de8','#c13fd6','#ff6fa8','#7a4a21','#c98f5b','#ffd7b0','#0b3d4a','#8a1c2b','#ff9f80','#b7e4a0','#a8c7ff'];
+let hist=[],redo=[],drawing=false,start,last,mid,pts,hue=0,sprayT;
+
+// ---------- UI setup
+TOOLS.forEach(([id,ic,name,key])=>{const b=document.createElement('button');b.dataset.t=id;b.title=name+' ('+key.toUpperCase()+')';b.innerHTML='<span>'+ic+'</span>'+name;b.onclick=()=>setTool(id);$('#tools').append(b)});
+function setTool(t){st.tool=t;document.querySelectorAll('#tools button').forEach(b=>b.classList.toggle('on',b.dataset.t===t))}
+SW.forEach(c=>{const b=document.createElement('button');b.style.background=c;b.title=c;b.setAttribute('aria-label',c);b.onclick=()=>setColor(c);b.oncontextmenu=e=>{e.preventDefault();st.fill=c;$('#fcolor').value=c};$('#sw').append(b)});
+function setColor(c){st.color=c;$('#color').value=c}
+$('#color').oninput=e=>st.color=e.target.value;
+$('#fcolor').oninput=e=>st.fill=e.target.value;
+$('#swap').onclick=()=>{const a=st.color;setColor(st.fill);st.fill=a;$('#fcolor').value=a};
+$('#size').oninput=e=>{st.size=+e.target.value;$('#so').textContent=st.size};
+$('#alpha').oninput=e=>{st.alpha=e.target.value/100;$('#ao').textContent=e.target.value+'%'};
+$('#tol').oninput=e=>{st.tol=+e.target.value;$('#to').textContent=st.tol};
+$('#mode').onchange=e=>st.mode=e.target.value;
+$('#bg').oninput=e=>st.bg=e.target.value;
+$('#preset').onchange=e=>{if(e.target.value!=='custom'){const[w,h]=e.target.value.split('x');$('#cw').value=w;$('#ch').value=h;resizeCanvas(+w,+h)}};
+$('#apply').onclick=()=>{const w=clamp($('#cw').value),h=clamp($('#ch').value);$('#cw').value=w;$('#ch').value=h;$('#preset').value='custom';resizeCanvas(w,h)};
+const clamp=v=>Math.max(50,Math.min(4000,Math.round(+v)||800));
+$('#undo').onclick=undo;$('#redo').onclick=redoFn;
+$('#clear').onclick=()=>{push();ctx.fillStyle=st.bg;ctx.fillRect(0,0,cv.width,cv.height)};
+$('#save').onclick=()=>cv.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='drawing.png';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)});
+$('#zi').onclick=()=>zoom(1.25);$('#zo').onclick=()=>zoom(.8);$('#zf').onclick=fit;
+
+// ---------- canvas, zoom, history
+function applyZoom(){const w=cv.width*st.zoom+'px',h=cv.height*st.zoom+'px';for(const c of[cv,pv]){c.style.width=w;c.style.height=h}$('#zl').textContent=Math.round(st.zoom*100)+'%'}
+function zoom(f){st.zoom=Math.max(.1,Math.min(8,st.zoom*f));applyZoom()}
+function fit(){const a=$('#area');st.zoom=Math.max(.1,Math.min(1,(a.clientWidth-40)/cv.width,(a.clientHeight-40)/cv.height));applyZoom()}
+function resizeCanvas(w,h,noPush){
+ if(!noPush)push();
+ const o=document.createElement('canvas');o.width=cv.width;o.height=cv.height;o.getContext('2d').drawImage(cv,0,0);
+ cv.width=pv.width=w;cv.height=pv.height=h;
+ ctx.fillStyle=st.bg;ctx.fillRect(0,0,w,h);ctx.drawImage(o,0,0);fit();
+}
+function push(){
+ hist.push(ctx.getImageData(0,0,cv.width,cv.height));redo=[];
+ const max=Math.max(5,Math.min(40,Math.floor(150e6/(cv.width*cv.height*4))));
+ while(hist.length>max)hist.shift();sync();
+}
+function restore(img){cv.width=pv.width=img.width;cv.height=pv.height=img.height;ctx.putImageData(img,0,0);$('#cw').value=img.width;$('#ch').value=img.height;$('#preset').value='custom';applyZoom();sync()}
+function undo(){if(!hist.length)return;redo.push(ctx.getImageData(0,0,cv.width,cv.height));restore(hist.pop())}
+function redoFn(){if(!redo.length)return;hist.push(ctx.getImageData(0,0,cv.width,cv.height));restore(redo.pop())}
+function sync(){$('#undo').disabled=!hist.length;$('#redo').disabled=!redo.length}
+
+// ---------- drawing
+const pos=e=>{const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*cv.width/r.width,y:(e.clientY-r.top)*cv.height/r.height}};
+function setup(c){const t=st.tool;c.lineCap=t==='marker'?'square':'round';c.lineJoin=t==='marker'?'miter':'round';c.lineWidth=st.size;c.strokeStyle=t==='eraser'?st.bg:st.color;c.fillStyle=c.strokeStyle;c.globalAlpha=1}
+function commit(){ctx.globalAlpha=st.alpha;ctx.drawImage(pv,0,0);ctx.globalAlpha=1;pctx.clearRect(0,0,pv.width,pv.height);pv.style.opacity=1}
+function spray(c,p){c.fillStyle=st.color;const r=st.size*1.5,n=Math.max(8,st.size);for(let i=0;i<n;i++){const a=Math.random()*6.283,d=r*Math.sqrt(Math.random());c.fillRect(p.x+Math.cos(a)*d,p.y+Math.sin(a)*d,1.5,1.5)}}
+function target(){return st.tool==='eraser'?ctx:pctx}
+
+pv.addEventListener('pointerdown',e=>{
+ if(e.button>0)return;e.preventDefault();const p=pos(e),t=st.tool;
+ if(t==='fill'){push();floodFill(Math.floor(p.x),Math.floor(p.y));return}
+ if(t==='pick'){const x=Math.max(0,Math.min(cv.width-1,Math.floor(p.x))),y=Math.max(0,Math.min(cv.height-1,Math.floor(p.y)));const d=ctx.getImageData(x,y,1,1).data;setColor('#'+[d[0],d[1],d[2]].map(v=>v.toString(16).padStart(2,'0')).join(''));return}
+ push();drawing=true;pv.setPointerCapture(e.pointerId);start=last=mid=p;
+ if(t!=='eraser')pv.style.opacity=st.alpha;
+ if(FREE.includes(t)){
+  const c=target();setup(c);
+  if(t==='spray'){spray(c,p);sprayT=setInterval(()=>spray(pctx,last),25)}
+  else{if(t==='rainbow')c.strokeStyle=`hsl(${hue} 90% 50%)`;c.beginPath();c.moveTo(p.x,p.y);c.lineTo(p.x+.01,p.y);c.stroke()}
+ }
+});
+pv.addEventListener('pointermove',e=>{
+ if(!drawing)return;const p=pos(e),t=st.tool;
+ if(FREE.includes(t)){
+  if(t==='spray'){last=p;spray(pctx,p);return}
+  const c=target(),m={x:(last.x+p.x)/2,y:(last.y+p.y)/2};
+  if(t==='rainbow'){hue=(hue+3)%360;c.strokeStyle=`hsl(${hue} 90% 50%)`}
+  c.beginPath();c.moveTo(mid.x,mid.y);c.quadraticCurveTo(last.x,last.y,m.x,m.y);c.stroke();mid=m;last=p;
+ }else{pctx.clearRect(0,0,pv.width,pv.height);setup(pctx);shape(pctx,start,p,e.shiftKey)}
+});
+function end(e){
+ if(!drawing)return;drawing=false;clearInterval(sprayT);const t=st.tool;
+ if(FREE.includes(t)){
+  if(t!=='spray'){const c=target();c.beginPath();c.moveTo(mid.x,mid.y);c.lineTo(last.x,last.y);c.stroke()}
+  if(t!=='eraser')commit();
+ }else{pctx.clearRect(0,0,pv.width,pv.height);setup(pctx);shape(pctx,start,pos(e),e.shiftKey);commit()}
+}
+pv.addEventListener('pointerup',end);pv.addEventListener('pointercancel',end);
+
+function shape(c,a,b,sh){
+ let dx=b.x-a.x,dy=b.y-a.y;const t=st.tool;
+ if(sh){if(t==='line'){const g=Math.round(Math.atan2(dy,dx)/(Math.PI/4))*Math.PI/4,l=Math.hypot(dx,dy);dx=Math.cos(g)*l;dy=Math.sin(g)*l}else{const m=Math.max(Math.abs(dx),Math.abs(dy));dx=(dx<0?-1:1)*m;dy=(dy<0?-1:1)*m}}
+ const x2=a.x+dx,y2=a.y+dy;c.beginPath();
+ if(t==='line'){c.moveTo(a.x,a.y);c.lineTo(x2,y2)}
+ else if(t==='rect')c.rect(a.x,a.y,dx,dy);
+ else if(t==='ellipse')c.ellipse(a.x+dx/2,a.y+dy/2,Math.abs(dx/2),Math.abs(dy/2),0,0,6.2832);
+ else if(t==='tri'){c.moveTo(a.x+dx/2,a.y);c.lineTo(x2,y2);c.lineTo(a.x,y2);c.closePath()}
+ else if(t==='star'){const cx=a.x+dx/2,cy=a.y+dy/2,rx=Math.abs(dx/2),ry=Math.abs(dy/2);for(let i=0;i<10;i++){const g=-Math.PI/2+i*Math.PI/5,r=i%2?.4:1;c[i?'lineTo':'moveTo'](cx+Math.cos(g)*rx*r,cy+Math.sin(g)*ry*r)}c.closePath()}
+ if(t!=='line'&&st.mode!=='stroke'){c.fillStyle=st.fill;c.fill()}
+ if(t==='line'||st.mode!=='fill')c.stroke();
+}
+
+// ---------- paint bucket
+function floodFill(sx,sy){
+ const w=cv.width,h=cv.height;if(sx<0||sy<0||sx>=w||sy>=h)return;
+ const img=ctx.getImageData(0,0,w,h),d=img.data,i0=(sy*w+sx)*4,T=[d[i0],d[i0+1],d[i0+2],d[i0+3]];
+ const n=parseInt(st.color.slice(1),16),R=n>>16,G=(n>>8)&255,B=n&255,A=st.alpha,tol=st.tol;
+ const ok=i=>Math.abs(d[i]-T[0])<=tol&&Math.abs(d[i+1]-T[1])<=tol&&Math.abs(d[i+2]-T[2])<=tol&&Math.abs(d[i+3]-T[3])<=tol;
+ const seen=new Uint8Array(w*h),stack=new Int32Array(w*h);let sp=0;stack[sp++]=sy*w+sx;seen[sy*w+sx]=1;
+ const add=(p)=>{if(!seen[p]&&ok(p*4)){seen[p]=1;stack[sp++]=p}};
+ while(sp){
+  const p=stack[--sp],x=p%w,y=(p/w)|0,i=p*4;
+  d[i]=d[i]*(1-A)+R*A;d[i+1]=d[i+1]*(1-A)+G*A;d[i+2]=d[i+2]*(1-A)+B*A;d[i+3]=d[i+3]+(255-d[i+3])*A;
+  if(x>0)add(p-1);if(x<w-1)add(p+1);if(y>0)add(p-w);if(y<h-1)add(p+w);
+ }
+ ctx.putImageData(img,0,0);
+}
+
+// ---------- keyboard
+addEventListener('keydown',e=>{
+ const tag=e.target.tagName,typing=tag==='INPUT'&&e.target.type==='number';
+ const k=e.key.toLowerCase();
+ if(e.ctrlKey||e.metaKey){if(typing)return;if(k==='z'){e.preventDefault();if(document.activeElement)document.activeElement.blur();e.shiftKey?redoFn():undo()}else if(k==='y'){e.preventDefault();redoFn()}return}
+ if(typing||tag==='SELECT')return;
+ const t=TOOLS.find(x=>x[3]===k);if(t){setTool(t[0]);return}
+ if(k==='['||k===']'){const s=$('#size');s.value=Math.max(1,Math.min(120,+s.value+(k===']'?2:-2)));s.oninput({target:s})}
+});
+
+// ---------- init
+setTool('pen');
+cv.width=pv.width=1024;cv.height=pv.height=768;
+ctx.fillStyle=st.bg;ctx.fillRect(0,0,1024,768);
+fit();sync();
+addEventListener('load',fit);
+</script>
+</body>
+</html>
